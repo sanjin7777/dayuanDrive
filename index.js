@@ -131,9 +131,15 @@ app
 
 const port = process.env.PORT || 80;
 async function bootstrap() {
-  await initDB();
-  app.listen(port, () => {
-    console.log("启动成功", port);
-  });
+  try {
+    await initDB();
+    app.listen(port, () => {
+      console.log("启动成功，端口:", port);
+    });
+  } catch (err) {
+    console.error("启动失败:", err.message);
+    console.error("请检查 MySQL 环境变量是否已配置: MYSQL_USERNAME, MYSQL_PASSWORD, MYSQL_ADDRESS");
+    process.exit(1);
+  }
 }
 bootstrap();
