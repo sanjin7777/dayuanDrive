@@ -3,6 +3,7 @@ const Router = require("koa-router");
 const logger = require("koa-logger");
 const bodyParser = require("koa-bodyparser");
 const { init: initDB, Counter, Transport } = require("./db");
+const { syncTransport, syncStatusChange } = require("./sync");
 
 const router = new Router();
 
@@ -39,6 +40,11 @@ router.post("/api/transport", async (ctx) => {
     signImg: body.signImg || "",
     imgList: body.imgList || [],
     openid,
+  });
+
+  // 同步到外部系统
+  syncTransport(record.toJSON()).catch(err => {
+    console.error('外部系统同步失败(创建):', err.message);
   });
 
   ctx.body = { code: 0, data: record };
@@ -95,6 +101,12 @@ router.put("/api/transport/:id", async (ctx) => {
   if (body.signImg) record.signImg = body.signImg;
 
   await record.save();
+
+  // 同步到外部系统
+  syncStatusChange(record.toJSON()).catch(err => {
+    console.error('外部系统同步失败(更新):', err.message);
+  });
+
   ctx.body = { code: 0, data: record };
 });
 
