@@ -1,12 +1,16 @@
 const PDFDocument = require('pdfkit');
 const https = require('https');
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
 
 // ═══════════════════════════════════════════════
 // 承诺书 PDF 生成模块
 // ═══════════════════════════════════════════════
 
 const TITLE = '承诺书';
+const DOC_CODE = 'GY-Y-JL-007'; // 右上角文件编号
+const LOGO_PATH = path.join(__dirname, 'images', 'logo.png'); // 左上角图片
 
 // 承诺书正文（模板原文）
 const SALUTATION = '尊敬的大源公司各位领导：我将进入大源厂区办理业务。';
@@ -23,8 +27,12 @@ const PROMISE_LINES = [
   '我承诺，装货完毕后尽快驶出大源厂区范围内，车辆如需在厂区内防护，自行解决，出现安全问题，后果自负。',
 ];
 
+// 需要红色显示的最后一条
+const RED_LINE_INDEX = 8;
+
 const COPY_LINE = '以下，请司机师傅抄写：我完全遵守如上承诺!';
 const COPY_HINT = '（不许丢字和错别字，不许遗漏标点）';
+const COPY_EMPHASIS = '我完全遵守如上承诺!'; // 需要加粗的部分
 
 const SIGN_HEADER = '以下，请库管和装卸队负责人填写：';
 const SIGN_CONFIRM = '同意开始办理业务：负责人签字：';
@@ -56,8 +64,6 @@ function downloadFile(url, timeout = 10000) {
 
 // 中文字体路径（优先使用项目内打包的字体，其次系统字体）
 function findChineseFont() {
-  const fs = require('fs');
-  const path = require('path');
   // 项目内打包的字体（本地开发与容器通用，基于 __dirname 定位）
   const bundled = path.join(__dirname, 'fonts', 'NotoSansCJKsc-Regular.otf');
   const candidates = [
@@ -70,6 +76,23 @@ function findChineseFont() {
     '/usr/share/fonts/truetype/wqy/wqy-microhei.ttc',
     '/usr/share/fonts/truetype/arphic/uming.ttc',
     '/app/fonts/NotoSansCJK-Regular.ttc',
+  ];
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p)) return p;
+    } catch (e) { /* ignore */ }
+  }
+  return null;
+}
+
+// 中文字体粗体路径
+function findChineseBoldFont() {
+  const bundled = path.join(__dirname, 'fonts', 'NotoSansCJKsc-Bold.otf');
+  const candidates = [
+    bundled,
+    '/app/fonts/NotoSansCJKsc-Bold.otf',
+    '/app/fonts/simhei.ttf',
+    '/app/fonts/SimHei.ttf',
   ];
   for (const p of candidates) {
     try {
@@ -105,30 +128,69 @@ async function generatePromisePdf(order, signBuffer) {
     doc.on('error', reject);
 
     const fontPath = findChineseFont();
+    const boldFontPath = findChineseBoldFont();
     if (fontPath) {
       doc.registerFont('Chinese', fontPath);
     } else {
       console.warn('[pdf] 未找到中文字体，中文可能无法正常显示');
     }
+    if (boldFontPath) {
+      doc.registerFont('ChineseBold', boldFontPath);
+    }
     const font = fontPath ? 'Chinese' : 'Helvetica';
+    const fontBold = boldFontPath ? 'ChineseBold' : font;
 
-    // ─── 标题 ───
-    doc.font(font).fontSize(20).fillColor('#000').text(TITLE, { align: 'center' });
+    // ─── 页眉：左上角图片 + 右上角编号 ───
+    const headerY = doc.page.margins.top - 45;
+    if (fs.existsSync(LOGO_PATH)) {
+      try {
+        doc.image(LOGO_PATH, doc.page.margins.left, headerY, {
+          width: 55,
+          height: 28,
+          fit: [55, 28],
+        });
+      } catch (e) {
+        console.warn('[pdf] 左上角图片加载失败:', e.message);
+      }
+    } else {
+      console.warn('[pdf] 未找到左上角图片: ' + LOGO_PATH);
+    }
+    // 右上角编号
+    doc.font(font).fontSize(11).fillColor('#000').text(
+      DOC_CODE,
+      doc.page.width - doc.page.margins.right - doc.widthOfString(DOC_CODE),
+      headerY,
+      { align: 'right' }
+    );
+    doc.moveDown(1.6);
+
+    // ─── 标题（加粗） ───
+    doc.font(fontBold).fontSize(22).fillColor('#000').text(TITLE, { align: 'center' });
     doc.moveDown(1.2);
 
     // ─── 称呼 ───
-    doc.fontSize(12).text(SALUTATION, { align: 'left', lineGap: 4 });
+    doc.font(font).fontSize(12).text(SALUTATION, { align: 'left', lineGap: 4 });
     doc.moveDown(0.6);
 
-    // ─── 承诺正文 ───
-    for (const line of PROMISE_LINES) {
-      doc.fontSize(12).text(line, { align: 'left', lineGap: 4 });
+    // ─── 承诺正文（最后一条红色） ───
+    for (let i = 0; i < PROMISE_LINES.length; i++) {
+      if (i === RED_LINE_INDEX) {
+        doc.font(font).fontSize(12).fillColor('#e60000').text(PROMISE_LINES[i], { align: 'left', lineGap: 4 });
+      } else {
+        doc.font(font).fontSize(12).fillColor('#000').text(PROMISE_LINES[i], { align: 'left', lineGap: 4 });
+      }
       doc.moveDown(0.35);
     }
+    doc.fillColor('#000');
 
     // ─── 抄写部分 ───
     doc.moveDown(0.8);
-    doc.fontSize(12).text(COPY_LINE, { align: 'left' });
+    // "以下，请司机师傅抄写：" 普通字体，后接 "我完全遵守如上承诺!" 加粗
+    doc.font(font).fontSize(12).fillColor('#000').text(
+      COPY_LINE.replace(COPY_EMPHASIS, ''),
+      { align: 'left', continued: true }
+    );
+    doc.font(fontBold).text(COPY_EMPHASIS);
     doc.fontSize(10).fillColor('#666').text(COPY_HINT, { align: 'left' });
     doc.fillColor('#000').moveDown(0.4);
     drawLine(doc, doc.y + 8); // 抄写横线
@@ -140,26 +202,19 @@ async function generatePromisePdf(order, signBuffer) {
     const month = now.getMonth() + 1;
     const day = now.getDate();
 
-    // 车牌号（默认空）
-    const plateNo = order.carType || '';
-
     doc.fontSize(12);
-    // 承诺人签字 + 签名图 + 车牌号 + 日期 排在一行
-    const signText = `承诺人签字：        车牌号：${plateNo}        日期：${year}年${month}月${day}日`;
+    const signText = `承诺人签字：        车牌号：        日期：${year}年${month}月${day}日`;
 
-    // 计算签名图放在"承诺人签字："后面
     const signLabelWidth = doc.widthOfString('承诺人签字：');
     const signX = doc.page.margins.left + signLabelWidth;
     const signY = doc.y;
 
     if (signBuffer) {
       try {
-        // 先放签名图，再画文字说明
         const imgH = 36;
         doc.image(signBuffer, signX, signY - 6, { width: 80, height: imgH, fit: [80, imgH] });
-        // 图片下方补车牌号和日期行
         doc.moveDown(1.6);
-        doc.fontSize(12).text(`车牌号：${plateNo}`, { align: 'left', continued: true });
+        doc.fontSize(12).text('车牌号：', { align: 'left', continued: true });
         doc.text(`        日期：${year}年${month}月${day}日`);
       } catch (e) {
         console.error('[pdf] 签名图插入失败:', e.message);
