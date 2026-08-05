@@ -54,20 +54,27 @@ function downloadFile(url, timeout = 10000) {
   });
 }
 
-// 中文字体路径
+// 中文字体路径（优先使用项目内打包的字体，其次系统字体）
 function findChineseFont() {
+  const fs = require('fs');
+  const path = require('path');
+  // 项目内打包的字体（本地开发与容器通用，基于 __dirname 定位）
+  const bundled = path.join(__dirname, 'fonts', 'NotoSansCJKsc-Regular.otf');
   const candidates = [
+    bundled,
+    '/app/fonts/NotoSansCJKsc-Regular.otf',
+    '/app/fonts/simhei.ttf',
+    '/app/fonts/SimHei.ttf',
     '/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc',
     '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
     '/usr/share/fonts/truetype/wqy/wqy-microhei.ttc',
     '/usr/share/fonts/truetype/arphic/uming.ttc',
-    '/app/fonts/simhei.ttf',
-    '/app/fonts/SimHei.ttf',
     '/app/fonts/NotoSansCJK-Regular.ttc',
   ];
-  const fs = require('fs');
   for (const p of candidates) {
-    if (fs.existsSync(p)) return p;
+    try {
+      if (fs.existsSync(p)) return p;
+    } catch (e) { /* ignore */ }
   }
   return null;
 }
