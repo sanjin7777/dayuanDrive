@@ -141,13 +141,13 @@ async function generatePromisePdf(order, signBuffer) {
     const fontBold = boldFontPath ? 'ChineseBold' : font;
 
     // ─── 页眉：左上角图片 + 右上角编号 ───
-    const headerY = doc.page.margins.top - 45;
+    const headerY = doc.page.margins.top - 40;
+
+    // 左上角图片（只给宽度，高度自动按比例，放大尺寸）
     if (fs.existsSync(LOGO_PATH)) {
       try {
         doc.image(LOGO_PATH, doc.page.margins.left, headerY, {
-          width: 55,
-          height: 28,
-          fit: [55, 28],
+          width: 130,
         });
       } catch (e) {
         console.warn('[pdf] 左上角图片加载失败:', e.message);
@@ -155,14 +155,19 @@ async function generatePromisePdf(order, signBuffer) {
     } else {
       console.warn('[pdf] 未找到左上角图片: ' + LOGO_PATH);
     }
-    // 右上角编号
+
+    // 右上角编号（绝对定位绘制，lineBreak:false 不改变后续布局）
     doc.font(font).fontSize(11).fillColor('#000').text(
       DOC_CODE,
       doc.page.width - doc.page.margins.right - doc.widthOfString(DOC_CODE),
       headerY,
-      { align: 'right' }
+      { lineBreak: false }
     );
-    doc.moveDown(1.6);
+
+    // 重置光标到左上角，开始正文（避免正文被页眉挤到右侧）
+    doc.x = doc.page.margins.left;
+    doc.y = headerY + 46;
+    doc.moveDown(1.2);
 
     // ─── 标题（加粗） ───
     doc.font(fontBold).fontSize(22).fillColor('#000').text(TITLE, { align: 'center' });
