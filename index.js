@@ -135,19 +135,29 @@ router.get("/api/transport/:id/pdf", async (ctx) => {
   }
 
   // 获取签名图片二进制
+  // 优先使用小程序传入的临时下载链接（推荐，避免依赖 wx-server-sdk 凭证）
+  const signUrl = ctx.query.signUrl || "";
   let signBuffer = null;
-  const signImg = record.signImg;
-  if (signImg) {
+  if (signUrl) {
     try {
-      if (signImg.startsWith("cloud://") && cloud) {
-        const res = await cloud.getTempFileURL({ fileList: [signImg] });
-        const url = res.fileList[0] && res.fileList[0].tempFileURL;
-        if (url) signBuffer = await downloadFile(url);
-      } else if (signImg.startsWith("http")) {
-        signBuffer = await downloadFile(signImg);
-      }
+      signBuffer = await downloadFile(signUrl);
     } catch (e) {
-      console.error("[pdf] 签名图片获取失败:", e.message);
+      console.error("[pdf] 签名图片下载失败:", e.message);
+    }
+  } else {
+    const signImg = record.signImg;
+    if (signImg) {
+      try {
+        if (signImg.startsWith("cloud://") && cloud) {
+          const res = await cloud.getTempFileURL({ fileList: [signImg] });
+          const url = res.fileList[0] && res.fileList[0].tempFileURL;
+          if (url) signBuffer = await downloadFile(url);
+        } else if (signImg.startsWith("http")) {
+          signBuffer = await downloadFile(signImg);
+        }
+      } catch (e) {
+        console.error("[pdf] 签名图片获取失败:", e.message);
+      }
     }
   }
 

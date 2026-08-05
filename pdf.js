@@ -33,19 +33,24 @@ const SIGN_DONE = '业务办理完毕，司机无违章违纪行为：负责人�
 /**
  * 下载文件内容（用于获取签名图片）
  * @param {string} url
+ * @param {number} timeout 超时ms，默认10秒
  * @returns {Promise<Buffer>}
  */
-function downloadFile(url) {
+function downloadFile(url, timeout = 10000) {
   return new Promise((resolve, reject) => {
     const transport = url.startsWith('https') ? https : http;
-    transport.get(url, (res) => {
+    const req = transport.get(url, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        return downloadFile(res.headers.location).then(resolve).catch(reject);
+        return downloadFile(res.headers.location, timeout).then(resolve).catch(reject);
       }
       const chunks = [];
       res.on('data', (c) => chunks.push(c));
       res.on('end', () => resolve(Buffer.concat(chunks)));
-    }).on('error', reject);
+    });
+    req.on('error', reject);
+    req.setTimeout(timeout, () => {
+      req.destroy(new Error('下载超时'));
+    });
   });
 }
 
