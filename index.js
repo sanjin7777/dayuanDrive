@@ -4,6 +4,20 @@ const logger = require("koa-logger");
 const bodyParser = require("koa-bodyparser");
 const { init: initDB, Counter, Transport } = require("./db");
 const { syncTransport, syncStatusChange } = require("./sync");
+const { generatePromisePdf, downloadFile } = require("./pdf");
+let cloud = null;
+try {
+  cloud = require("wx-server-sdk");
+  // 云托管环境访问云存储需要配置 WX_APPID 与 WX_APP_SECRET
+  const initOpts = { env: process.env.WX_ENV_ID || "prod-d7gjdayar977d88da" };
+  if (process.env.WX_APPID && process.env.WX_APP_SECRET) {
+    initOpts.appid = process.env.WX_APPID;
+    initOpts.secret = process.env.WX_APP_SECRET;
+  }
+  cloud.init(initOpts);
+} catch (e) {
+  console.warn("[pdf] wx-server-sdk 未安装，PDF签名图片将无法获取:", e.message);
+}
 
 const router = new Router();
 
@@ -108,6 +122,40 @@ router.put("/api/transport/:id", async (ctx) => {
   });
 
   ctx.body = { code: 0, data: record };
+});
+
+// 导出承诺书 PDF
+router.get("/api/transport/:id/pdf", async (ctx) => {
+  const { id } = ctx.params;
+  const record = await Transport.findByPk(id);
+  if (!record) {
+    ctx.status = 404;
+    ctx.body = { code: 1, msg: "记录不存在" };
+    return;
+  }
+
+  // 获取签名图片二进制
+  let signBuffer = null;
+  const signImg = record.signImg;
+  if (signImg) {
+    try {
+      if (signImg.startsWith("cloud://") && cloud) {
+        const res = await cloud.getTempFileURL({ fileList: [signImg] });
+        const url = res.fileList[0] && res.fileList[0].tempFileURL;
+        if (url) signBuffer = await downloadFile(url);
+      } else if (signImg.startsWith("http")) {
+        signBuffer = await downloadFile(signImg);
+      }
+    } catch (e) {
+      console.error("[pdf] 签名图片获取失败:", e.message);
+    }
+  }
+
+  const pdfBuffer = await generatePromisePdf(record.toJSON(), signBuffer);
+
+  ctx.set("Content-Type", "application/pdf");
+  ctx.set("Content-Disposition", `attachment; filename="promise_${record.id}.pdf"`);
+  ctx.body = pdfBuffer;
 });
 
 // 获取微信 Open ID

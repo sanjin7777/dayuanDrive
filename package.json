@@ -18,6 +18,8 @@
     "koa-logger": "^3.2.1",
     "koa-router": "^10.1.1",
     "mysql2": "^2.3.3",
-    "sequelize": "^6.13.0"
+    "pdfkit": "^0.15.0",
+    "sequelize": "^6.13.0",
+    "wx-server-sdk": "~2.6.3"
   }
 }
