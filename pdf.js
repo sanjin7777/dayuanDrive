@@ -35,8 +35,14 @@ const COPY_HINT = '（不许丢字和错别字，不许遗漏标点）';
 const COPY_EMPHASIS = '我完全遵守如上承诺!'; // 需要加粗的部分
 
 const SIGN_HEADER = '以下，请库管和装卸队负责人填写：';
-const SIGN_CONFIRM = '同意开始办理业务：负责人签字：';
-const SIGN_DONE = '业务办理完毕，司机无违章违纪行为：负责人签字：';
+const SIGN_CONFIRM = '同意开始办理业务： 负责人签字：';
+const SIGN_DONE = '业务办理完毕，司机无违章违纪行为：  负责人签字：';
+
+// 中文字号对应磅值
+const SIZE_ER = 22;    // 二号
+const SIZE_SAN = 16;   // 三号
+const SIZE_WU = 10.5;  // 五号
+const SIZE_XIAO_WU = 9; // 小五
 
 /**
  * 下载文件内容（用于获取签名图片）
@@ -62,12 +68,13 @@ function downloadFile(url, timeout = 10000) {
   });
 }
 
-// 中文字体路径（优先使用项目内打包的字体，其次系统字体）
+// 中文字体路径（优先使用项目内打包的微软雅黑，其次备用字体）
 function findChineseFont() {
   // 项目内打包的字体（本地开发与容器通用，基于 __dirname 定位）
-  const bundled = path.join(__dirname, 'fonts', 'NotoSansCJKsc-Regular.otf');
+  const bundled = path.join(__dirname, 'fonts', 'msyh_regular.ttf');
   const candidates = [
     bundled,
+    '/app/fonts/msyh_regular.ttf',
     '/app/fonts/NotoSansCJKsc-Regular.otf',
     '/app/fonts/simhei.ttf',
     '/app/fonts/SimHei.ttf',
@@ -87,9 +94,10 @@ function findChineseFont() {
 
 // 中文字体粗体路径
 function findChineseBoldFont() {
-  const bundled = path.join(__dirname, 'fonts', 'NotoSansCJKsc-Bold.otf');
+  const bundled = path.join(__dirname, 'fonts', 'msyh_bold.ttf');
   const candidates = [
     bundled,
+    '/app/fonts/msyh_bold.ttf',
     '/app/fonts/NotoSansCJKsc-Bold.otf',
     '/app/fonts/simhei.ttf',
     '/app/fonts/SimHei.ttf',
@@ -143,11 +151,11 @@ async function generatePromisePdf(order, signBuffer) {
     // ─── 页眉：左上角图片 + 右上角编号 ───
     const headerY = doc.page.margins.top - 40;
 
-    // 左上角图片（只给宽度，高度自动按比例，放大尺寸）
+    // 左上角图片（只给宽度，高度自动按比例，拉长图片）
     if (fs.existsSync(LOGO_PATH)) {
       try {
         doc.image(LOGO_PATH, doc.page.margins.left, headerY, {
-          width: 130,
+          width: 220,
         });
       } catch (e) {
         console.warn('[pdf] 左上角图片加载失败:', e.message);
@@ -156,8 +164,8 @@ async function generatePromisePdf(order, signBuffer) {
       console.warn('[pdf] 未找到左上角图片: ' + LOGO_PATH);
     }
 
-    // 右上角编号（绝对定位绘制，lineBreak:false 不改变后续布局）
-    doc.font(font).fontSize(11).fillColor('#000').text(
+    // 右上角编号（小五字号，绝对定位绘制，不改变后续布局）
+    doc.font(font).fontSize(SIZE_XIAO_WU).fillColor('#000').text(
       DOC_CODE,
       doc.page.width - doc.page.margins.right - doc.widthOfString(DOC_CODE),
       headerY,
@@ -169,20 +177,20 @@ async function generatePromisePdf(order, signBuffer) {
     doc.y = headerY + 46;
     doc.moveDown(1.2);
 
-    // ─── 标题（加粗） ───
-    doc.font(fontBold).fontSize(22).fillColor('#000').text(TITLE, { align: 'center' });
+    // ─── 标题（二号加粗） ───
+    doc.font(fontBold).fontSize(SIZE_ER).fillColor('#000').text(TITLE, { align: 'center' });
     doc.moveDown(1.2);
 
-    // ─── 称呼 ───
-    doc.font(font).fontSize(12).text(SALUTATION, { align: 'left', lineGap: 4 });
+    // ─── 称呼（五号） ───
+    doc.font(font).fontSize(SIZE_WU).text(SALUTATION, { align: 'left', lineGap: 4 });
     doc.moveDown(0.6);
 
-    // ─── 承诺正文（最后一条红色） ───
+    // ─── 承诺正文（五号，最后一条红色） ───
     for (let i = 0; i < PROMISE_LINES.length; i++) {
       if (i === RED_LINE_INDEX) {
-        doc.font(font).fontSize(12).fillColor('#e60000').text(PROMISE_LINES[i], { align: 'left', lineGap: 4 });
+        doc.font(font).fontSize(SIZE_WU).fillColor('#e60000').text(PROMISE_LINES[i], { align: 'left', lineGap: 4 });
       } else {
-        doc.font(font).fontSize(12).fillColor('#000').text(PROMISE_LINES[i], { align: 'left', lineGap: 4 });
+        doc.font(font).fontSize(SIZE_WU).fillColor('#000').text(PROMISE_LINES[i], { align: 'left', lineGap: 4 });
       }
       doc.moveDown(0.35);
     }
@@ -190,13 +198,15 @@ async function generatePromisePdf(order, signBuffer) {
 
     // ─── 抄写部分 ───
     doc.moveDown(0.8);
-    // "以下，请司机师傅抄写：" 普通字体，后接 "我完全遵守如上承诺!" 加粗
-    doc.font(font).fontSize(12).fillColor('#000').text(
+    // "以下，请司机师傅抄写：" 五号普通字体
+    doc.font(font).fontSize(SIZE_WU).fillColor('#000').text(
       COPY_LINE.replace(COPY_EMPHASIS, ''),
       { align: 'left', continued: true }
     );
-    doc.font(fontBold).text(COPY_EMPHASIS);
-    doc.fontSize(10).fillColor('#666').text(COPY_HINT, { align: 'left' });
+    // "我完全遵守如上承诺!" 三号加粗
+    doc.font(fontBold).fontSize(SIZE_SAN).text(COPY_EMPHASIS);
+    // 提示文字五号
+    doc.font(font).fontSize(SIZE_WU).fillColor('#666').text(COPY_HINT, { align: 'left' });
     doc.fillColor('#000').moveDown(0.4);
     drawLine(doc, doc.y + 8); // 抄写横线
 
@@ -207,7 +217,7 @@ async function generatePromisePdf(order, signBuffer) {
     const month = now.getMonth() + 1;
     const day = now.getDate();
 
-    doc.fontSize(12);
+    doc.font(font).fontSize(SIZE_WU);
     const signText = `承诺人签字：        车牌号：        日期：${year}年${month}月${day}日`;
 
     const signLabelWidth = doc.widthOfString('承诺人签字：');
@@ -219,26 +229,27 @@ async function generatePromisePdf(order, signBuffer) {
         const imgH = 36;
         doc.image(signBuffer, signX, signY - 6, { width: 80, height: imgH, fit: [80, imgH] });
         doc.moveDown(1.6);
-        doc.fontSize(12).text('车牌号：', { align: 'left', continued: true });
-        doc.text(`        日期：${year}年${month}月${day}日`);
+        doc.font(font).fontSize(SIZE_WU).text('车牌号：', { align: 'left', continued: true });
+        // 车牌号与日期之间空开
+        doc.text(`                       日期：${year}年${month}月${day}日`);
       } catch (e) {
         console.error('[pdf] 签名图插入失败:', e.message);
-        doc.fontSize(12).text(signText, { align: 'left' });
+        doc.font(font).fontSize(SIZE_WU).text(signText, { align: 'left' });
       }
     } else {
-      doc.fontSize(12).text(signText, { align: 'left' });
+      doc.font(font).fontSize(SIZE_WU).text(signText, { align: 'left' });
     }
 
-    // ─── 库管/装卸队负责人部分 ───
+    // ─── 库管/装卸队负责人部分（五号） ───
     doc.moveDown(1.5);
-    doc.fontSize(12).text(SIGN_HEADER, { align: 'left' });
+    doc.font(font).fontSize(SIZE_WU).text(SIGN_HEADER, { align: 'left' });
     doc.moveDown(0.5);
     doc.text(SIGN_CONFIRM, { align: 'left' });
     doc.moveDown(1.5);
     drawLine(doc, doc.y + 4);
 
     doc.moveDown(2.2);
-    doc.text(SIGN_DONE, { align: 'left' });
+    doc.font(font).fontSize(SIZE_WU).text(SIGN_DONE, { align: 'left' });
     doc.moveDown(1.5);
     drawLine(doc, doc.y + 4);
 
