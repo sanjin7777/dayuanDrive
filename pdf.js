@@ -154,20 +154,20 @@ async function generatePromisePdf(order, signBuffer) {
     doc.moveDown(1.0);
 
     // ─── 称呼 + 承诺正文（五号加粗；最后一条红色） ───
-    const bodyOpts = { align: 'left', width: contentWidth, lineGap: 3 };
+    const bodyOpts = { align: 'left', width: contentWidth, lineGap: 6 };
 
     doc.font(fontBold).fontSize(SIZE_BODY).fillColor('#000').text(SALUTATION, bodyOpts);
-    doc.moveDown(0.45);
+    doc.moveDown(0.7);
 
     for (let i = 0; i < PROMISE_LINES.length; i++) {
       const color = i === RED_LINE_INDEX ? '#FF0000' : '#000';
       doc.font(fontBold).fontSize(SIZE_BODY).fillColor(color).text(PROMISE_LINES[i], bodyOpts);
-      doc.moveDown(0.3);
+      doc.moveDown(0.65);
     }
     doc.fillColor('#000');
 
     // ─── 车牌号 / 手机号 / 日期 ───
-    doc.moveDown(1.2);
+    doc.moveDown(1.4);
     const now = new Date();
     const year = now.getFullYear();
     const month = now.getMonth() + 1;
@@ -186,20 +186,25 @@ async function generatePromisePdf(order, signBuffer) {
     doc.text(`日期：${year}年${month}月${day}日`, col3, fieldY, { lineBreak: false });
 
     doc.x = left;
-    doc.y = fieldY + SIZE_FIELD + 28;
+    doc.y = fieldY + SIZE_FIELD + 36;
 
-    // ─── 签名 ───
+    // ─── 签名（靠右） ───
     const signLabel = '签  名：';
+    const signImgW = 160;
+    const signImgH = 70;
+    const right = doc.page.width - doc.page.margins.right;
     doc.font(fontBold).fontSize(SIZE_FIELD);
-    const signLabelX = left + 60;
+    const labelW = doc.widthOfString(signLabel);
+    // 标签 + 签名图整体贴右：签名图右缘对齐右边距
+    const signImgX = right - signImgW;
+    const signLabelX = signImgX - labelW - 8;
     const signLabelY = doc.y;
     doc.text(signLabel, signLabelX, signLabelY, { lineBreak: false });
 
     if (signBuffer) {
       try {
-        const labelW = doc.widthOfString(signLabel);
-        doc.image(signBuffer, signLabelX + labelW + 8, signLabelY - 20, {
-          fit: [160, 70],
+        doc.image(signBuffer, signImgX, signLabelY - 20, {
+          fit: [signImgW, signImgH],
         });
         doc.y = Math.max(doc.y, signLabelY + 60);
       } catch (e) {
