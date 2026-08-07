@@ -40,6 +40,21 @@ router.post("/api/transport", async (ctx) => {
   const openid = ctx.request.headers["x-wx-openid"] || "";
   const body = ctx.request.body;
 
+  // 限制：同一司机（手机号）有未完结单据时不允许新建
+  if (body.phone) {
+    const carrying = await Transport.findOne({
+      where: { phone: body.phone, status: "运输中" },
+    });
+    if (carrying) {
+      ctx.status = 400;
+      ctx.body = {
+        code: 1,
+        msg: "该司机尚有未完成的运输任务，请先结束上一单再新建",
+      };
+      return;
+    }
+  }
+
   const record = await Transport.create({
     type: body.type,
     name: body.name,
@@ -53,6 +68,9 @@ router.post("/api/transport", async (ctx) => {
     status: "运输中",
     signImg: body.signImg || "",
     imgList: body.imgList || [],
+    privacyAgreed: !!body.privacyAgreed,
+    signConfirmed: !!body.signConfirmed,
+    signConfirmedAt: body.signConfirmedAt || "",
     openid,
   });
 
@@ -67,11 +85,12 @@ router.post("/api/transport", async (ctx) => {
 // 获取运输记录列表
 router.get("/api/transport", async (ctx) => {
   const openid = ctx.request.headers["x-wx-openid"] || "";
-  const { status } = ctx.query;
+  const { status, idcard } = ctx.query;
 
   const where = {};
   if (openid) where.openid = openid;
   if (status) where.status = status;
+  if (idcard) where.idcard = idcard;
 
   const list = await Transport.findAll({
     where,

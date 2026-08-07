@@ -93,6 +93,23 @@ const Transport = sequelize.define("Transport", {
     allowNull: true,
     comment: '微信用户openid',
   },
+  privacyAgreed: {
+    type: DataTypes.BOOLEAN,
+    allowNull: true,
+    defaultValue: false,
+    comment: '是否已同意隐私保护指引',
+  },
+  signConfirmed: {
+    type: DataTypes.BOOLEAN,
+    allowNull: true,
+    defaultValue: false,
+    comment: '是否确认电子签名法律效力',
+  },
+  signConfirmedAt: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    comment: '电子签名确认时间',
+  },
 });
 
 async function init() {
