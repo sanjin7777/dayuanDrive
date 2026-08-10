@@ -44,6 +44,16 @@ const Transport = sequelize.define("Transport", {
     allowNull: false,
     comment: '车型',
   },
+  plateNo: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    comment: '车牌号',
+  },
+  tonnage: {
+    type: DataTypes.FLOAT,
+    allowNull: true,
+    comment: '载重吨位',
+  },
   startAddr: {
     type: DataTypes.STRING,
     allowNull: false,

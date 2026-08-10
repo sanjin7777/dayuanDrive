@@ -61,6 +61,8 @@ router.post("/api/transport", async (ctx) => {
     idcard: body.idcard,
     phone: body.phone,
     carType: body.carType,
+    plateNo: body.plateNo || "",
+    tonnage: body.tonnage || 0,
     startAddr: body.startAddr,
     destAddr: body.destAddr,
     factoryAddr: body.factoryAddr,

@@ -44,6 +44,8 @@ function buildPayload(transport, isUpdate) {
     idcard: transport.idcard,
     phone: transport.phone,
     carType: transport.carType,
+    plateNo: transport.plateNo || '',
+    tonnage: transport.tonnage || 0,
     startAddr: transport.startAddr,
     destAddr: transport.destAddr,
     factoryAddr: transport.factoryAddr,
