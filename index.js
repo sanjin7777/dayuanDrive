@@ -135,6 +135,16 @@ router.put("/api/transport/:id", async (ctx) => {
 
   if (body.signImg) record.signImg = body.signImg;
 
+  // 校验：只有上传单据图片后才能结束运输
+  if (body.status === "运输完成") {
+    const hasImages = (record.imgList && record.imgList.length > 0) || (body.addImages && body.addImages.length > 0);
+    if (!hasImages) {
+      ctx.status = 400;
+      ctx.body = { code: 1, msg: "请先上传收/送货单据图片后再结束运输" };
+      return;
+    }
+  }
+
   await record.save();
 
   // 同步到外部系统
