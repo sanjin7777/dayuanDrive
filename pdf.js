@@ -178,8 +178,8 @@ async function generatePromisePdf(order, signBuffer) {
     doc.font(fontBold).fontSize(SIZE_FIELD).fillColor('#000');
     const fieldY = doc.y;
     const col1 = left;
-    const col2 = left + contentWidth * 0.30;
-    const col3 = left + contentWidth * 0.82;
+    const col2 = left + contentWidth * 0.36;
+    const col3 = left + contentWidth * 0.72;
 
     doc.text(`车牌号：${plate}`, col1, fieldY, { lineBreak: false });
     doc.text(`手机号：${phone}`, col2, fieldY, { lineBreak: false });
