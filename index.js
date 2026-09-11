@@ -77,8 +77,10 @@ router.post("/api/transport", async (ctx) => {
   });
 
   // 同步到外部系统
-  syncTransport(record.toJSON()).catch(err => {
-    console.error('外部系统同步失败(创建):', err.message);
+  syncTransport(record.toJSON()).then(() => {
+    console.log('外部系统同步成功(创建) id=' + record.id);
+  }).catch(err => {
+    console.error('外部系统同步失败(创建) id=' + record.id + ':', err.message);
   });
 
   ctx.body = { code: 0, data: record };
@@ -148,8 +150,10 @@ router.put("/api/transport/:id", async (ctx) => {
   await record.save();
 
   // 同步到外部系统
-  syncStatusChange(record.toJSON()).catch(err => {
-    console.error('外部系统同步失败(更新):', err.message);
+  syncStatusChange(record.toJSON()).then(() => {
+    console.log('外部系统同步成功(更新) id=' + record.id);
+  }).catch(err => {
+    console.error('外部系统同步失败(更新) id=' + record.id + ':', err.message);
   });
 
   ctx.body = { code: 0, data: record };
