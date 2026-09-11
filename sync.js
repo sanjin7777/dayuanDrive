@@ -53,6 +53,12 @@ function externalRequest(data) {
           return;
         }
 
+        // 响应体含 error 字段，视为业务失败
+        if (parsed && parsed.error) {
+          reject(new Error(`外部接口业务失败: ${JSON.stringify(parsed.error)}`));
+          return;
+        }
+
         // 若有业务状态码字段，判断是否成功（兼容常见字段名）
         const bizCode = parsed.code !== undefined ? parsed.code
           : (parsed.success !== undefined ? (parsed.success ? 0 : 1) : undefined);
@@ -81,6 +87,16 @@ function externalRequest(data) {
   });
 }
 
+// 将 arriveTime 规范化为 YYYY-MM-DD HH:mm:ss，兼容第三方接口的日期解析
+function formatDateTime(str) {
+  if (!str) return '';
+  const m = String(str).match(/^(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?/);
+  if (!m) return str;
+  const pad = (n) => String(n).padStart(2, '0');
+  const [, y, mo, d, h, mi, s] = m;
+  return `${y}-${pad(mo)}-${pad(d)} ${pad(h)}:${pad(mi)}:${pad(s || '00')}`;
+}
+
 function buildPayload(transport, isUpdate) {
   const payload = {
     type: transport.type,
@@ -93,7 +109,7 @@ function buildPayload(transport, isUpdate) {
     startAddr: transport.startAddr,
     destAddr: transport.destAddr,
     factoryAddr: transport.factoryAddr,
-    arriveTime: transport.arriveTime,
+    arriveTime: formatDateTime(transport.arriveTime),
     status: transport.status,
     signImg: transport.signImg || '',
     openid: transport.openid || '',
