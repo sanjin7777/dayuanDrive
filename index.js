@@ -3,7 +3,7 @@ const Router = require("koa-router");
 const logger = require("koa-logger");
 const bodyParser = require("koa-bodyparser");
 const { init: initDB, Counter, Transport } = require("./db");
-const { syncTransport, syncStatusChange } = require("./sync");
+const { syncTransport, syncStatusChange, uploadToMinio } = require("./sync");
 const { generatePromisePdf, downloadFile } = require("./pdf");
 let cloud = null;
 try {
@@ -16,10 +16,73 @@ try {
   }
   cloud.init(initOpts);
 } catch (e) {
-  console.warn("[pdf] wx-server-sdk 未安装，PDF签名图片将无法获取:", e.message);
+  console.warn("[cloud] wx-server-sdk 未安装，云存储图片处理将不可用:", e.message);
 }
 
 const router = new Router();
+
+// 将云存储 fileID 的图片下载后上传到第三方 MinIO，返回可公网访问的 URL
+async function uploadCloudFileToMinio(fileID, fileName) {
+  if (!cloud) {
+    console.warn("[MinIO] 云 SDK 不可用，跳过上传");
+    return "";
+  }
+  const dl = await cloud.downloadFile({ fileID });
+  const buffer = dl.fileContent;
+  if (!buffer || !buffer.length) {
+    throw new Error("云存储文件下载为空");
+  }
+  // 根据扩展名推断 Content-Type
+  const ext = (fileName.split(".").pop() || "png").toLowerCase();
+  const contentType = ext === "jpg" || ext === "jpeg" ? "image/jpeg"
+    : ext === "gif" ? "image/gif"
+    : ext === "webp" ? "image/webp"
+    : "image/png";
+  const url = await uploadToMinio(buffer, fileName, contentType);
+  return url;
+}
+
+// 同步前处理图片：把 cloud:// fileID 转成第三方 MinIO 的 URL
+async function prepareImagesForSync(transport) {
+  const t = Object.assign({}, transport);
+
+  // 签名图片
+  if (typeof t.signImg === "string" && t.signImg.startsWith("cloud://")) {
+    try {
+      const ext = (t.signImg.split(".").pop() || "png");
+      const url = await uploadCloudFileToMinio(t.signImg, "sign_" + t.id + "." + ext);
+      if (url) {
+        t.signImg = url;
+        console.log("[同步] 签名图已上传 MinIO:", url);
+      }
+    } catch (e) {
+      console.error("[同步] 签名图上传 MinIO 失败:", e.message);
+    }
+  }
+
+  // 凭证图片列表
+  if (Array.isArray(t.imgList) && t.imgList.length > 0) {
+    const newList = [];
+    for (let i = 0; i < t.imgList.length; i++) {
+      const u = t.imgList[i];
+      if (typeof u === "string" && u.startsWith("cloud://")) {
+        try {
+          const ext = (u.split(".").pop() || "png");
+          const url = await uploadCloudFileToMinio(u, "receipt_" + t.id + "_" + i + "." + ext);
+          newList.push(url || u);
+        } catch (e) {
+          console.error("[同步] 凭证图上传 MinIO 失败:", e.message);
+          newList.push(u);
+        }
+      } else {
+        newList.push(u);
+      }
+    }
+    t.imgList = newList;
+  }
+
+  return t;
+}
 
 const HOME_PAGE = `
 <!DOCTYPE html>
@@ -40,10 +103,10 @@ router.post("/api/transport", async (ctx) => {
   const openid = ctx.request.headers["x-wx-openid"] || "";
   const body = ctx.request.body;
 
-  // 限制：同一司机（手机号）有未完结单据时不允许新建
-  if (body.phone) {
+  // 限制：同一司机（身份证号）有未完结单据时不允许新建
+  if (body.idcard) {
     const carrying = await Transport.findOne({
-      where: { phone: body.phone, status: "运输中" },
+      where: { idcard: body.idcard, status: "运输中" },
     });
     if (carrying) {
       ctx.status = 400;
@@ -77,11 +140,14 @@ router.post("/api/transport", async (ctx) => {
   });
 
   // 同步到外部系统
-  syncTransport(record.toJSON()).then(() => {
-    console.log('外部系统同步成功(创建) id=' + record.id);
-  }).catch(err => {
-    console.error('外部系统同步失败(创建) id=' + record.id + ':', err.message);
-  });
+  prepareImagesForSync(record.toJSON())
+    .then((t) => syncTransport(t))
+    .then(() => {
+      console.log("外部系统同步成功(创建) id=" + record.id);
+    })
+    .catch((err) => {
+      console.error("外部系统同步失败(创建) id=" + record.id + ":", err.message);
+    });
 
   ctx.body = { code: 0, data: record };
 });
@@ -150,11 +216,14 @@ router.put("/api/transport/:id", async (ctx) => {
   await record.save();
 
   // 同步到外部系统
-  syncStatusChange(record.toJSON()).then(() => {
-    console.log('外部系统同步成功(更新) id=' + record.id);
-  }).catch(err => {
-    console.error('外部系统同步失败(更新) id=' + record.id + ':', err.message);
-  });
+  prepareImagesForSync(record.toJSON())
+    .then((t) => syncStatusChange(t))
+    .then(() => {
+      console.log("外部系统同步成功(更新) id=" + record.id);
+    })
+    .catch((err) => {
+      console.error("外部系统同步失败(更新) id=" + record.id + ":", err.message);
+    });
 
   ctx.body = { code: 0, data: record };
 });

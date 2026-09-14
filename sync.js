@@ -7,6 +7,102 @@ const EXTERNAL_CONFIG = {
   timeout: 30000,
 };
 
+// MinIO 文件上传配置
+const MINIO_CONFIG = {
+  uploadPath: '/service/base/minio/api/upload',
+  folderPath: '/ppe/TransportationInfo',
+  timeout: 60000,
+};
+
+// 从接口返回中提取文件 URL（兼容多种返回结构）
+function extractFileUrl(parsed) {
+  if (!parsed) return '';
+  if (typeof parsed === 'string') return parsed;
+  const data = parsed.data !== undefined ? parsed.data : parsed;
+  if (typeof data === 'string') return data;
+  const candidates = [
+    data.url, data.fileUrl, data.filePath, data.path, data.key, data.minioUrl,
+    data.objectName, data.fileName
+  ];
+  for (const c of candidates) {
+    if (typeof c === 'string' && c) return c;
+  }
+  return '';
+}
+
+// 将二进制文件上传到第三方 MinIO 文件服务
+function uploadToMinio(fileBuffer, fileName, contentType) {
+  return new Promise((resolve, reject) => {
+    const boundary = '----FormBoundary' + Math.random().toString(36).slice(2);
+    const url = new URL(EXTERNAL_CONFIG.baseURL + MINIO_CONFIG.uploadPath);
+
+    // 构造 multipart/form-data 报文体
+    const head = Buffer.from(
+      '--' + boundary + '\r\n' +
+      'Content-Disposition: form-data; name="folderPath"\r\n\r\n' +
+      MINIO_CONFIG.folderPath + '\r\n' +
+      '--' + boundary + '\r\n' +
+      'Content-Disposition: form-data; name="multipartFiles"; filename="' + fileName + '"\r\n' +
+      'Content-Type: ' + (contentType || 'image/png') + '\r\n\r\n',
+      'utf-8'
+    );
+    const tail = Buffer.from('\r\n--' + boundary + '--\r\n', 'utf-8');
+    const body = Buffer.concat([head, fileBuffer, tail]);
+
+    const options = {
+      hostname: url.hostname,
+      port: url.port || 80,
+      path: url.pathname,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'multipart/form-data; boundary=' + boundary,
+        'Content-Length': body.length,
+      },
+      timeout: MINIO_CONFIG.timeout,
+    };
+
+    console.log('[MinIO] 上传文件:', fileName, '大小:', fileBuffer.length, 'bytes');
+
+    const transport = url.protocol === 'https:' ? https : http;
+    const req = transport.request(options, (res) => {
+      let resBody = '';
+      res.on('data', (c) => resBody += c);
+      res.on('end', () => {
+        console.log('[MinIO] 响应状态码:', res.statusCode);
+        console.log('[MinIO] 响应内容:', resBody);
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          reject(new Error('MinIO 上传失败，状态码 ' + res.statusCode + ': ' + resBody));
+          return;
+        }
+        let parsed;
+        try {
+          parsed = JSON.parse(resBody);
+        } catch (e) {
+          resolve(resBody);
+          return;
+        }
+        if (parsed && parsed.error) {
+          reject(new Error('MinIO 上传业务失败: ' + JSON.stringify(parsed.error)));
+          return;
+        }
+        resolve(extractFileUrl(parsed));
+      });
+    });
+
+    req.on('error', (err) => {
+      console.error('[MinIO] 请求错误:', err.message);
+      reject(err);
+    });
+    req.on('timeout', () => {
+      console.error('[MinIO] 上传超时');
+      req.destroy(new Error('MinIO 上传超时'));
+    });
+
+    req.write(body);
+    req.end();
+  });
+}
+
 function externalRequest(data) {
   return new Promise((resolve, reject) => {
     const url = new URL(EXTERNAL_CONFIG.baseURL + EXTERNAL_CONFIG.path);
@@ -140,4 +236,5 @@ async function syncStatusChange(transport) {
 module.exports = {
   syncTransport,
   syncStatusChange,
+  uploadToMinio,
 };
